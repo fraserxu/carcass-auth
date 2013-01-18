@@ -21,10 +21,13 @@
     "debug": "~0.7.0",
     "express": "~3.0.5",
     "passport": "~0.1.15",
+    "uid": "~0.0.1",
     "underscore": "~1.4.3"
   },
   "devDependencies": {
     "connect-redis": "1.x",
+    "cookie-signature": "~0.0.1",
+    "email": "~0.2.5",
     "mocha": "1.x",
     "passport-local": "~0.1.6",
     "request": "2.x",
