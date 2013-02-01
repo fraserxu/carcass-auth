@@ -17,7 +17,7 @@ var noop = function(err) {
 // * A callback
 
 // Optional options:
-// * A confirm method; default to email.
+// * A confirm method; default to ?
 
 // Operations:
 // * request validate
@@ -69,17 +69,18 @@ function initialize(app, options) {
             // Validated.
             // Generate token.
             tempSession(options, function(err, token) {
-                debug('token', token);
                 if (err) return next(err);
 
                 // Succeeded.
                 // This callback cannot block the process.
                 // It's the callback's responsibility to do things like:
                 // * Save the email and the secret pair.
+                // * Send the token?
                 callback({
                     operation: 'request succeed',
                     email: req.body.email,
-                    secret: options.secret
+                    secret: options.secret,
+                    token: token
                 }, noop);
 
                 // Send an email.
@@ -95,13 +96,44 @@ function initialize(app, options) {
     // Validate the confirm request and ...
     app.post('/confirm', function(req, res, next) {
         // Require a valid email and a token.
-        if (!req.body || !req.body.email ||
+        if (!req.body || !req.body.email || !req.body.token ||
             !email.isValidAddress(req.body.email)) {
             var err = new Error('invalid email');
             err.status = 400;
             return next(err);
         }
-        // TODO
+
+        debug('body', req.body);
+        return res.json(true);
+
+        // It's the callback's responsibility to do things like:
+        callback({
+            operation: 'confirm validate',
+            email: req.body.email
+        }, function(err, secret) {
+            // Not validated.
+            if (err) return next(err);
+
+            options.email = req.body.email;
+            options.token = req.body.token;
+            options.secret = secret;
+
+            // Validated.
+            // ? token.
+            tempSession(options, function(err) {
+                if (err) return next(err);
+
+                // Succeeded.
+                // This callback cannot block the process.
+                // It's the callback's responsibility to do things like:
+                callback({
+                    operation: 'confirm succeed'
+                }, noop);
+
+                // .
+                res.json(true);
+            });
+        });
     });
 };
 
