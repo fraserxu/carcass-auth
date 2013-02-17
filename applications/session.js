@@ -20,9 +20,7 @@ function initialize(app, options) {
     // TODO: fingerprint?
     var session = express.session({
         key: options.key || 'connect.sid',
-        store: options.store || new express.session.MemoryStore({
-            reapInterval: -1
-        }),
+        store: options.store || null,
         secret: options.secret || 'Lorem ipsum dolor sit amet',
         cookie: options.cookie || {
             path: '/',
