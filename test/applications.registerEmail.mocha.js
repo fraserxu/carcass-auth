@@ -23,6 +23,9 @@ describe('Register with Email', function() {
         server.mount('cors');
         server.mount('restify');
         server.mount('registerEmail', '/register', {
+            store: new RedisStore({
+                prefix: 'carcass-auth-test:'
+            }),
             callback: model.registerEmail
         });
         server.start(done);

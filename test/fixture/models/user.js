@@ -46,6 +46,15 @@ builder.registerEmail = function(options, callback) {
         // ..
         builder._token = options.token;
         break;
+    case 'confirm validate':
+        storageReg.get(options.email, function(err, data) {
+            if (err) return callback(err);
+            if (data && data.secret) {
+                return callback(null, data.secret);
+            }
+            callback(new Error());
+        });
+        break;
     default:
         callback(new Error());
         break;
