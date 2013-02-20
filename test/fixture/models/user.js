@@ -28,33 +28,15 @@ builder.registerEmail = function(options, callback) {
 
     switch (options.operation) {
     case 'request validate':
-        storageReg.get(options.email, function(err, data) {
-            // TODO: storage false; should be easier to figure out "not found".
-            if (err) return callback();
-            if (data) {
-                var _err = new Error('conflict');
-                _err.status = 409;
-                return callback(_err);
-            }
-        });
-        break;
+        // Nothing in this example.
+        // ...
+        return callback();
     case 'request succeed':
-        storageReg.put({
-            id: options.email,
-            secret: options.secret
-        }, callback);
-        // ..
+        // Send token.
         builder._token = options.token;
-        break;
+        return callback();
     case 'confirm validate':
-        storageReg.get(options.email, function(err, data) {
-            if (err) return callback(err);
-            if (data && data.secret) {
-                return callback(null, data.secret);
-            }
-            callback(new Error());
-        });
-        break;
+        return callback();
     default:
         callback(new Error());
         break;

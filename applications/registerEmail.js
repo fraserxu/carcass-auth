@@ -42,6 +42,55 @@ function initialize(app, options) {
 
     var callback = options.callback;
 
+    // Temp session handler.
+    // ...
+    function tempSession(args) {
+        var def = carcass.deferred();
+        // Requires a real storage.
+        if (!options.store) throw new Error('A session store is required.');
+        // Requires a secret.
+        if (!options.secret) throw new Error('A secret is required.');
+        // Requires an email.
+        if (!args.email) throw new Error('An email is required.');
+        // Uses a temporary request.
+        var tempReq = {};
+        // Uses a temporary option, in order to get the session generate
+        // function.
+        var tempOpt = {
+            store: options.store
+        };
+        // The session middleware will add the session generate function to the
+        // store instance.
+        express.session(tempOpt);
+        // .
+        tempReq.sessionStore = tempOpt.store;
+        // .
+        if (args.token) {
+            var sessionID = signature.unsign(args.token, options.secret);
+            debug('session id', sessionID);
+            tempReq.sessionStore.get(sessionID, function(err, sess) {
+                if (err) throw err;
+                debug('sess', sess);
+                // TODO: remove temp session.
+                // callback(err, sess);
+                def.resolve(sess);
+            });
+        } else {
+            // .
+            tempReq.sessionStore.generate(tempReq);
+            // .
+            tempReq.session.email = args.email;
+            // .
+            tempReq.session.resetMaxAge();
+            tempReq.session.save(function() {
+                // Generate a token with the session id.
+                debug('session id', tempReq.sessionID);
+                def.resolve(signature.sign(tempReq.sessionID, options.secret));
+            });
+        }
+        return def.promise;
+    };
+
     // Step 1: the request.
     // Collect an email and send a confirm link (or method).
     function register(req, res, next) {
@@ -53,42 +102,41 @@ function initialize(app, options) {
             return next(err);
         }
 
-        // It's the callback's responsibility to check things like:
-        // * The email is not registered.
-        // * The email has not sent another request before.
-        callback({
-            operation: 'request validate',
-            email: req.body.email
-        }, function(err) {
-            // Not validated.
-            if (err) return next(err);
-
-            options.email = req.body.email;
-            options.secret = uid();
-
-            // Validated.
-            // Generate token.
-            tempSession(options, function(err, token) {
-                if (err) return next(err);
-
-                // Succeeded.
-                // This callback cannot block the process.
-                // It's the callback's responsibility to do things like:
-                // * Save the email and the secret pair.
-                // * Send the token?
-                callback({
-                    operation: 'request succeed',
-                    email: req.body.email,
-                    secret: options.secret,
-                    token: token
-                }, noop);
-
-                // Send an email.
-                // TODO
-
-                // .
-                res.json(true);
+        // .
+        carcass.promise(function() {
+            var def = carcass.deferred();
+            // It's the callback's responsibility to check things like:
+            // * The email is not registered.
+            // * The email has not sent another request before.
+            callback({
+                operation: 'request validate',
+                email: req.body.email
+            }, function(err) {
+                // Not validated.
+                if (err) throw err;
+                // Validated.
+                def.resolve({
+                    email: req.body.email
+                });
             });
+            return def.promise;
+        })
+        // Generate token.
+        .then(tempSession)
+        // .
+        .end(function(token) {
+            // Succeeded.
+            // This callback cannot block the process.
+            // It's the callback's responsibility to do things like:
+            // * Send the token?
+            callback({
+                operation: 'request succeed',
+                email: req.body.email,
+                token: token
+            }, noop);
+            res.json(true);
+        }, function(err) {
+            next(err);
         });
     };
 
@@ -105,77 +153,44 @@ function initialize(app, options) {
 
         debug('body', req.body);
 
-        // It's the callback's responsibility to do things like:
-        callback({
-            operation: 'confirm validate',
-            email: req.body.email
-        }, function(err, secret) {
-            // Not validated.
-            if (err) return next(err);
-
-            options.email = req.body.email;
-            options.token = req.body.token;
-            options.secret = secret;
-
-            // Validated.
-            // ? token.
-            tempSession(options, function(err) {
-                if (err) return next(err);
-
-                // Succeeded.
-                // This callback cannot block the process.
-                // It's the callback's responsibility to do things like:
-                callback({
-                    operation: 'confirm succeed'
-                }, noop);
-
-                // .
-                res.json(true);
+        // .
+        carcass.promise(function() {
+            var def = carcass.deferred();
+            // It's the callback's responsibility to check things like:
+            // * The email is not registered.
+            // * The email has not sent another request before.
+            callback({
+                operation: 'confirm validate',
+                email: req.body.email
+            }, function(err) {
+                // Not validated.
+                if (err) throw err;
+                // Validated.
+                def.resolve({
+                    email: req.body.email,
+                    token: req.body.token
+                });
             });
+            return def.promise;
+        })
+        // Generate token.
+        .then(tempSession)
+        // .
+        .end(function(sess) {
+            // Succeeded.
+            // This callback cannot block the process.
+            // It's the callback's responsibility to do things like:
+            // * Create the user.
+            callback({
+                operation: 'confirm succeed',
+                email: req.body.email
+            }, noop);
+            res.json(true);
+        }, function(err) {
+            next(err);
         });
     };
 
     app.post('/', register);
     app.post('/confirm', confirm);
-};
-
-// Opens a temporary session and returns a token.
-// Requires an email and a secret.
-// Should be saved in a special session storage.
-// .
-function tempSession(options, callback) {
-    // Uses a temporary request.
-    var tempReq = {};
-    // Uses a temporary option, in order to get the session generate function.
-    // Requires a real storage.
-    var tempOpt = {
-        store: options.store || new express.session.MemoryStore()
-    };
-    // The session middleware will add the session generate function to the
-    // store instance.
-    express.session(tempOpt);
-    // .
-    tempReq.sessionStore = tempOpt.store;
-    // .
-    if (options.token && options.secret) {
-        var sessionID = signature.unsign(options.token, options.secret);
-        debug('session id', sessionID);
-        tempReq.sessionStore.get(sessionID, function(err, sess) {
-            debug('sess', sess);
-            // TODO: remove temp session.
-            callback(err, sess);
-        });
-    } else {
-        // .
-        tempReq.sessionStore.generate(tempReq);
-        // .
-        tempReq.session.email = options.email;
-        // .
-        tempReq.session.resetMaxAge();
-        tempReq.session.save(function() {
-            // Generate a token with the session id.
-            debug('session id', tempReq.sessionID);
-            callback(null, signature.sign(tempReq.sessionID, options.secret));
-        });
-    }
 };
